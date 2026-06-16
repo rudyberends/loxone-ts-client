@@ -1,0 +1,74 @@
+{
+  "name": "loxone-ts-client",
+  "version": "0.1.0",
+  "description": "The ultimate, fully type-safe TypeScript client for communicating with Loxone Miniservers (token/JWT auth, command encryption, live state updates, control commands).",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "loxone": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "!dist/loxone",
+    "!dist/loxone.exe",
+    "!dist/sea-prep.blob",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "cli": "tsx src/cli.ts",
+    "example": "tsx examples/testclient.ts",
+    "example:verify": "tsx examples/verify-enrichment.ts",
+    "example:stats": "tsx examples/verify-statistics.ts",
+    "codegen": "node scripts/codegen-controls.mjs scripts/control-specs.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build",
+    "build:binary": "npm run build && node scripts/build-binary.mjs"
+  },
+  "keywords": [
+    "loxone",
+    "miniserver",
+    "smarthome",
+    "home-automation",
+    "websocket",
+    "typescript"
+  ],
+  "author": "Rudy Berends",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudyberends/loxone-ts-client.git"
+  },
+  "homepage": "https://github.com/rudyberends/loxone-ts-client#readme",
+  "bugs": "https://github.com/rudyberends/loxone-ts-client/issues",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.22.0",
+    "prettier": "^3.5.3",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.41.0",
+    "vitest": "^3.0.0"
+  }
+}

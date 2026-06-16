@@ -1,0 +1,62 @@
+name: release-binaries
+
+# Builds the standalone `loxone` CLI for each OS/arch and attaches them to the
+# GitHub release. The npm package itself stays binary-free (see .npmignore); these
+# are for everyone who runs the CLI without Node — PowerShell, Python, bash.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.asset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: loxone-linux-x64
+          - os: ubuntu-24.04-arm
+            asset: loxone-linux-arm64
+          - os: macos-13
+            asset: loxone-macos-x64
+          - os: macos-14
+            asset: loxone-macos-arm64
+          - os: windows-latest
+            asset: loxone-windows-x64.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run build:binary
+
+      - name: Stage the asset (Unix)
+        if: runner.os != 'Windows'
+        run: mv dist/loxone "dist/${{ matrix.asset }}"
+      - name: Stage the asset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Move-Item dist/loxone.exe "dist/${{ matrix.asset }}"
+
+      # On a published release: attach the binary to it.
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.asset }}
+
+      # On manual runs: just expose it as a workflow artifact.
+      - name: Upload artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}

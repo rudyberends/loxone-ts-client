@@ -1,0 +1,140 @@
+name: Publish to npm
+
+# Publishes the package when a GitHub Release is published. The release tag
+# (e.g. "v1.2.3" or "v1.3.0-beta.0") determines the version and dist-tag.
+# A manual dispatch is provided as an escape hatch.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without the v prefix (e.g. 1.2.3 or 1.3.0-beta.0)'
+        required: true
+
+# Never cancel an in-flight publish.
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance (supply-chain attestation)
+
+jobs:
+  publish:
+    name: Build, verify and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - name: Ensure the npm token is configured
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::The NPM_TOKEN repository secret is not set."
+            exit 1
+          fi
+
+      - name: Resolve version and dist-tag
+        id: meta
+        shell: bash
+        # Untrusted values are passed via env (never interpolated into the script
+        # body) to avoid shell injection. See GitHub's security-hardening guidance.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_VERSION"
+          else
+            VERSION="$RELEASE_TAG"
+          fi
+          VERSION="${VERSION#v}" # strip an optional leading "v" for either path
+
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not resolve a version to publish."
+            exit 1
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Resolved version '$VERSION' is not a valid SemVer version."
+            exit 1
+          fi
+
+          if [[ "$VERSION" == *-* ]]; then
+            # Pre-release version: publish under its label (e.g. 1.3.0-beta.0 -> "beta").
+            PRERELEASE="${VERSION#*-}"
+            LABEL="${PRERELEASE%%.*}"
+            # npm rejects a dist-tag that is itself a valid SemVer range (e.g. "0"),
+            # so fall back to "next" for empty/numeric labels.
+            if [ -z "$LABEL" ] || [[ "$LABEL" =~ ^[0-9]+$ ]]; then
+              LABEL="next"
+            fi
+            DIST_TAG="$LABEL"
+          else
+            # Stable version: guard against a release flagged as a pre-release in the
+            # UI, which would otherwise overwrite the public "latest" tag.
+            if [ "$RELEASE_PRERELEASE" = "true" ]; then
+              echo "::error::Release is marked as a pre-release but tag '$VERSION' is a stable version. Use a pre-release tag (e.g. v${VERSION}-rc.0) or uncheck 'Set as a pre-release'."
+              exit 1
+            fi
+            DIST_TAG="latest"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing version $VERSION under dist-tag '$DIST_TAG'"
+
+      - name: Check whether this version is already published
+        id: dedupe
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          PKG_NAME="$(node -p "require('./package.json').name")"
+          if npm view "${PKG_NAME}@${VERSION}" version > /dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${PKG_NAME}@${VERSION} is already published; the publish step will be skipped."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Set package version
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      # The build is produced by the package's `prepublishOnly` hook during
+      # `npm publish`, so no separate build step is needed here.
+      - name: Publish to npm
+        if: steps.dedupe.outputs.already != 'true'
+        env:
+          DIST_TAG: ${{ steps.meta.outputs.dist_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public --tag "$DIST_TAG"
