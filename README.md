@@ -147,6 +147,11 @@ structure.lastModified;                 // configuration timestamp
 structure.msInfo.msName;                // typed msInfo
 structure.rooms;                        // Map<uuid, Room>
 structure.categories;                   // Map<uuid, Category>
+
+const room = structure.resolveRoom('Bedroom');
+room?.typeName;                             // 'bedroom' | 'commonRoom' | 'stagingArea' | 'central' | undefined
+room?.type;                                 // raw room-function code (number), per Loxone's RoomType
+structure.resolveCategory('Lights')?.type;  // 'lights' | 'shading' | 'media' | 'indoortemperature' | ...
 structure.controls;                     // Map<uuid, Control> (includes sub-controls)
 
 const control = structure.getControl('0f869a02-0367-3105-ffffb2f8baf0a3e6');

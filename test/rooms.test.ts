@@ -211,3 +211,31 @@ describe('RoomView capabilities — write', () => {
     expect(sent).toContain('volume/30');
   });
 });
+
+describe('Room.type / typeName (Loxone RoomType enum)', () => {
+  const model = StructureModel.parse({
+    lastModified: 'x', msInfo: {}, cats: {}, controls: {},
+    rooms: {
+      bed: { uuid: 'bed', name: 'Bedroom', type: 1 },
+      living: { uuid: 'living', name: 'Living', type: 2 },
+      hall: { uuid: 'hall', name: 'Hall', type: 3 },
+      central: { uuid: 'central', name: 'Central', type: 4 },
+      plain: { uuid: 'plain', name: 'Plain' }, // no type
+      weird: { uuid: 'weird', name: 'Weird', type: 99 }, // unknown code
+    },
+  } as LoxoneStructureFile);
+
+  it('maps the documented room function codes to semantic labels', () => {
+    expect(model.resolveRoom('bed')!.typeName).toBe('bedroom');
+    expect(model.resolveRoom('living')!.typeName).toBe('commonRoom');
+    expect(model.resolveRoom('hall')!.typeName).toBe('stagingArea');
+    expect(model.resolveRoom('central')!.typeName).toBe('central');
+  });
+  it('exposes the raw code and returns undefined for absent/unknown types', () => {
+    expect(model.resolveRoom('bed')!.type).toBe(1);
+    expect(model.resolveRoom('plain')!.type).toBeUndefined();
+    expect(model.resolveRoom('plain')!.typeName).toBeUndefined();
+    expect(model.resolveRoom('weird')!.type).toBe(99); // raw passthrough
+    expect(model.resolveRoom('weird')!.typeName).toBeUndefined(); // no semantic label
+  });
+});

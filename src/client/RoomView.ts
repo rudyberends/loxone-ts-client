@@ -10,6 +10,7 @@ import { AudioZoneV2Control } from '../controls/generated/AudioZoneV2Control.js'
 import { PresenceDetectorControl } from '../controls/generated/PresenceDetectorControl.js';
 import type { Control } from '../structure/Control.js';
 import type { Room } from '../structure/Room.js';
+import type { RoomTypeName } from '../structure/types.js';
 
 /** The (read-only) live state of a room-level capability, with the item that provides it. */
 export interface ReadableCapability<T> {
@@ -221,6 +222,10 @@ export class RoomView {
   /** Room UUID. */
   get uuid(): string {
     return this.room.uuid;
+  }
+  /** The room's function as a semantic label (e.g. `'bedroom'`), if classified. */
+  get typeName(): RoomTypeName | undefined {
+    return this.room.typeName;
   }
   /** All typed item handles in this room. */
   get items(): ControlHandle[] {

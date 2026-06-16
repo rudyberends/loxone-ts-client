@@ -217,6 +217,25 @@ export interface RawControl {
   [key: string]: unknown;
 }
 
+/**
+ * Room function classification (`room.type`). Not in Loxone's published protocol
+ * spec, but defined in their own app (`enums.RoomType`): the room's role, usable
+ * for presence/automation grouping. `0` / absent means unspecified.
+ */
+export enum RoomType {
+  /** "Schlafraum" — bedroom. */
+  Bedroom = 1,
+  /** "Aufenthaltsraum" — living / common area. */
+  CommonRoom = 2,
+  /** "Durchgangsraum" — passage / hallway. */
+  StagingArea = 3,
+  /** "Zentralraum" — central room. */
+  Central = 4,
+}
+
+/** Stable semantic label for a {@link RoomType} (what `Room.typeName` returns). */
+export type RoomTypeName = 'bedroom' | 'commonRoom' | 'stagingArea' | 'central';
+
 /** A room entry. */
 export interface RawRoom {
   uuid: string;
@@ -225,6 +244,7 @@ export interface RawRoom {
   image?: string;
   /** Sort rating. */
   defaultRating?: number;
+  /** Room function code; see {@link RoomType}. `0` / absent = unspecified. */
   type?: number;
   color?: string;
 }
