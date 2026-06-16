@@ -1,6 +1,6 @@
 {
   "name": "loxone-ts-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The ultimate, fully type-safe TypeScript client for communicating with Loxone Miniservers (token/JWT auth, command encryption, live state updates, control commands).",
   "type": "module",
   "exports": {
