@@ -10,7 +10,7 @@ It implements the core Loxone communication protocol (V17.0): the encrypted toke
 - **Application-layer encryption** — RSA session-key exchange + AES-256-CBC command encryption (required for Gen-1 / non-TLS, optional over WSS). Supports `enc` and `fenc` (encrypted responses) with automatic salt rotation.
 - **Live state updates** — binary message-header framing and parsing of all four event tables (value, text, daytimer, weather), automatically enriched with the owning control / room / state.
 - **Control commands** — `jdev/sps/io/...` plus visu-password **secured commands** (`jdev/sps/ios/...`).
-- **Statistics & history** — typed `statistic` (V1) / `statisticV2` configs, plus downloads that **decode** the binary statistic streams into `{ timestamp, values }` points and the block history (`gethistory`) into typed entries.
+- **Statistics & history** — typed `statistic` (V1) / `statisticV2` configs, plus downloads that **decode** the binary statistic streams into `{ timestamp, ts, values }` points (one `getStatistics` call for V1 or V2, `findStatisticSince`, and a compact `{ ts, v }` form) and the block history (`gethistory`) into typed entries.
 - **Typed structure file** — no `any` in the public surface. `LoxAPP3.json` is parsed into a navigable `StructureModel` of rooms, categories, controls (with sub-controls) and states. Type-specific `details` are exposed as `Record<string, unknown>` rather than per-type-modelled.
 - **Robust connection handling** — keepalive, automatic reconnect with exponential backoff, and token reuse across reconnects.
 - **Zero dependencies** — uses Node's built-in `WebSocket`, `fetch`, and `node:crypto`; nothing to install transitively. Silent by default; plug in your own `Logger` (or the bundled `ConsoleLogger`).
@@ -418,7 +418,27 @@ const points = await client.getStatistic(meter, {
 
 // Legacy (V1) statistics — one binary file per month ("YYYYMM") or day ("YYYYMMDD").
 const v1 = await client.getStatisticV1(meter, '202606');     // values per control.statistic.outputs
+
+// One call for either handling: V2 when the control has statisticV2, else V1
+// (fetched month by month, missing months skipped, trimmed to the range).
+const series = await client.getStatistics(meter, {
+  from: new Date('2026-01-01'),
+  to: new Date(),
+  // version: 'v1',                                          // force a handling
+  // groupId, unit ('all' default), mode, output             // V2 only
+});
+
+// Since when is there data? Uses getStatisticInfo when it reports a date, else
+// binary-searches the monthly V1 files (getStatisticInfo can return [] even
+// when V1 data exists).
+const since = await client.findStatisticSince(meter);       // Date | undefined
+
+// Compact form for storage/transfer: Unix-second timestamps, float artefacts removed.
+compactStatistics(series);                                   // [{ ts: 1782864621, v: [25.26] }, …]
+compactStatistics(series, { decimals: 1 });                  // [{ ts: 1782864621, v: [25.3] }, …]
 ```
+
+Every point also carries `ts` (Unix seconds) next to `timestamp`.
 
 `decodeBinaryStatistics(bytes, valueCount, epoch)` is exported too, if you fetch a
 binary stream yourself. Timestamps differ by handling: V1 is Miniserver-local

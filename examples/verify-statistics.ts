@@ -7,7 +7,7 @@
  *   npm run example:stats -- <ip:port> <user> <pass>
  *   LOXONE_HOST=ip LOXONE_USER=u LOXONE_PASS=p npx tsx examples/verify-statistics.ts
  */
-import { ConsoleLogger, LoxoneClient, type Control } from '../src/index.js';
+import { compactStatistics, ConsoleLogger, LoxoneClient, type Control } from '../src/index.js';
 
 const host = process.env.LOXONE_HOST ?? process.argv[2];
 const username = process.env.LOXONE_USER ?? process.argv[3];
@@ -92,6 +92,22 @@ async function main(): Promise<void> {
     }
   } else {
     console.log('\nSTAT V1  (no control has a V1 statistic)');
+  }
+
+  // --- Unified read + data start ----------------------------------------
+  const withStats = withV2[0] ?? withV1[0];
+  if (withStats) {
+    console.log(`\nUNIFIED  ${preview(withStats)}`);
+    try {
+      const since = await client.findStatisticSince(withStats);
+      console.log(`  findStatisticSince: ${since?.toISOString() ?? '(no data found)'}`);
+      const to = new Date();
+      const from = new Date(to.getTime() - 24 * 3600 * 1000); // last 24h
+      const points = await client.getStatistics(withStats, { from, to });
+      console.log(`  getStatistics(last 24h): ${points.length} points; compact: ${JSON.stringify(compactStatistics(points.slice(0, 3)))}`);
+    } catch (err) {
+      console.log(`  unified statistics failed: ${(err as Error).message}`);
+    }
   }
 
   // --- Enriched change events -------------------------------------------

@@ -22,10 +22,15 @@ import type { Room } from './structure/Room.js';
 import { type ControlHistoryEntry, parseControlHistory } from './structure/history.js';
 import {
   decodeBinaryStatistics,
+  monthIndex,
+  monthStart,
   parseStatisticInfo,
   type StatisticGroupInfo,
   type StatisticPoint,
   type StatisticQuery,
+  type StatisticsRequest,
+  statisticMonthsBetween,
+  toStatisticMonth,
   toUnixSeconds,
 } from './structure/statistics.js';
 import { RoomView } from './client/RoomView.js';
@@ -593,7 +598,102 @@ export class LoxoneClient extends TypedEventEmitter<LoxoneClientEvents> implemen
     const uuid = resolved?.uuidAction ?? resolveControlUuid(control);
     const valueCount = resolved?.statistic?.outputs.length ?? 1;
     const file = await this.getFile(`binstatisticdata/${uuid}/${date}`);
+    if (!file.isBinary) {
+      throw new LoxoneCommandError(`No V1 statistic data: ${file.text().slice(0, 200)}`, {
+        command: `binstatisticdata/${uuid}/${date}`,
+      });
+    }
     return decodeBinaryStatistics(file.buffer, valueCount, 'loxone');
+  }
+
+  /**
+   * Reads a control's statistics over a time range through one shape, whichever
+   * handling it uses: V2 (`getStatistic`) when the control has a `statisticV2`
+   * configuration, else V1 — fetched month by month and trimmed to the range,
+   * with months the Miniserver has no file for skipped. Force a handling with
+   * `request.version`. Note that V1 timestamps are Miniserver-local wall-clock
+   * time (see {@link getStatisticV1}), and the range is compared against them.
+   */
+  async getStatistics(control: string | Uuid | Control, request: StatisticsRequest): Promise<StatisticPoint[]> {
+    const resolved = this.resolveControl(control);
+    const version = request.version ?? (resolved?.statistic && !resolved.statisticV2 ? 'v1' : 'v2');
+    const from = toUnixSeconds(request.from);
+    const to = toUnixSeconds(request.to);
+
+    if (version === 'v2') {
+      const groupId = request.groupId ?? resolved?.statisticV2?.groups[0]?.id;
+      if (groupId === undefined) {
+        throw new LoxoneStateError(
+          `No V2 statistic group known for "${resolved?.name ?? String(control)}"; pass groupId`,
+        );
+      }
+      return this.getStatistic(control, {
+        groupId,
+        from,
+        to,
+        unit: request.unit ?? 'all',
+        ...(request.mode && { mode: request.mode }),
+        ...(request.output && { output: request.output }),
+      });
+    }
+
+    const points: StatisticPoint[] = [];
+    for (const month of statisticMonthsBetween(new Date(from * 1000), new Date(to * 1000))) {
+      for (const point of await this.tryGetStatisticV1(control, month)) {
+        if (point.ts >= from && point.ts <= to) points.push(point);
+      }
+    }
+    return points;
+  }
+
+  /**
+   * Finds since when a control has statistic data. Uses the V2 `activeSince` from
+   * {@link getStatisticInfo} when the Miniserver reports it (the earliest group);
+   * otherwise — for V1 statistics, or controls `getStatisticInfo` returns nothing
+   * for — it searches the monthly V1 files for the oldest one with data and returns
+   * that file's first timestamp. The search assumes data is continuous from its
+   * start up to `latest` (default: now), and probes only months from `earliest`
+   * (default: 2009, the Loxone epoch) on. Returns `undefined` when no data is found.
+   */
+  async findStatisticSince(
+    control: string | Uuid | Control,
+    options: { earliest?: Date; latest?: Date } = {},
+  ): Promise<Date | undefined> {
+    const resolved = this.resolveControl(control);
+    if (resolved?.statisticV2 || !resolved?.statistic) {
+      const info = await this.getStatisticInfo(control);
+      const since = info.map((g) => g.activeSince).filter((ts) => ts > 0);
+      if (since.length > 0) return new Date(Math.min(...since) * 1000);
+    }
+
+    const firstPoint = async (index: number) =>
+      (await this.tryGetStatisticV1(control, toStatisticMonth(monthStart(index))))[0];
+    let lo = monthIndex(options.earliest ?? new Date(Date.UTC(2009, 0, 1)));
+    let hi = monthIndex(options.latest ?? new Date());
+    let found = await firstPoint(hi);
+    if (!found) return undefined;
+    // Binary search for the oldest month with data; `hi` always has data.
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const point = await firstPoint(mid);
+      if (point) {
+        hi = mid;
+        found = point;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return found.timestamp;
+  }
+
+  /** {@link getStatisticV1}, treating a month the Miniserver rejects (no file) as empty. */
+  private async tryGetStatisticV1(control: string | Uuid | Control, date: string): Promise<StatisticPoint[]> {
+    try {
+      return await this.getStatisticV1(control, date);
+    } catch (error) {
+      if (error instanceof LoxoneCommandError) return [];
+      throw error;
+    }
   }
 
   // --- typed control wrappers --------------------------------------------

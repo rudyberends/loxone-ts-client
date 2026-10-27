@@ -92,13 +92,18 @@ export { Room } from './structure/Room.js';
 export { Category } from './structure/Category.js';
 export { formatLoxoneValue } from './structure/format.js';
 export {
+  compactStatistics,
   decodeBinaryStatistics,
   parseStatisticInfo,
+  toStatisticMonth,
   toUnixSeconds,
+  type CompactStatisticPoint,
+  type CompactStatisticsOptions,
   type StatisticGroupInfo,
   type StatisticMode,
   type StatisticPoint,
   type StatisticQuery,
+  type StatisticsRequest,
   type StatisticUnit,
 } from './structure/statistics.js';
 export {
