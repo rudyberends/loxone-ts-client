@@ -12,12 +12,12 @@ export class NfcCodeTouchControl extends ControlHandle {
     await this.send(`output/${clamp(outputNr, 1, 6)}`);
   }
   /** Return a JSON array with history entry objects. */
-  async history(): Promise<void> {
-    await this.send('history');
+  async history(): Promise<unknown> {
+    return (await this.send('history')).jsonValue();
   }
   /** Return a JSON array with code objects from this keypad. */
-  async codes(): Promise<void> {
-    await this.send('codes');
+  async codes(): Promise<unknown> {
+    return (await this.send('codes')).jsonValue();
   }
   /** Create a new code with the given properties (type 0-2). */
   async codeCreate(name: string, code: string, type: number, outputs: number, standardOutput: number): Promise<void> {

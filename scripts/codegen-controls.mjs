@@ -126,8 +126,14 @@ for (const spec of specs) {
     const sig = used.map((p) => `${p.name}: ${p.info.tsType}`).join(', ');
     if (cmd.doc) lines.push(`  /** ${cmd.doc} */`);
     // Command methods resolve to void (they throw on a non-200 response); use the
-    // ControlHandle.send() escape hatch when you need the raw response.
-    lines.push(`  async ${method}(${sig}): Promise<void> {`, `    await this.send(${wire});`, `  }`);
+    // ControlHandle.send() escape hatch when you need the raw response. Commands the
+    // spec documents as returning data (`"returns": "json"`) resolve to the parsed
+    // response value instead (a hand subclass can narrow `unknown` to a typed shape).
+    if (cmd.returns === 'json') {
+      lines.push(`  async ${method}(${sig}): Promise<unknown> {`, `    return (await this.send(${wire})).jsonValue();`, `  }`);
+    } else {
+      lines.push(`  async ${method}(${sig}): Promise<void> {`, `    await this.send(${wire});`, `  }`);
+    }
   }
 
   for (const g of spec.getters ?? []) {
@@ -212,7 +218,7 @@ for (const spec of specs) {
 // the SAME class name in ../. The generated base file is still emitted (so the
 // subclass can extend it), but the barrel, registry, and accessors must reference
 // the hand subclass so consumers get the richer wrapper everywhere.
-const HAND_EXTENDED = new Set(['Intercom', 'IntercomV2', 'Irrigation', 'WindowMonitor']);
+const HAND_EXTENDED = new Set(['Intercom', 'IntercomV2', 'Irrigation', 'NfcCodeTouch', 'WindowMonitor']);
 const classImportPath = (g) => (HAND_EXTENDED.has(g.controlType) ? `../${g.className}.js` : `./${g.className}.js`);
 
 // Barrel + registry contribution.

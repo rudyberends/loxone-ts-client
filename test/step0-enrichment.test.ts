@@ -6,6 +6,7 @@ import { DimmerControl } from '../src/controls/DimmerControl.js';
 import { IntercomControl } from '../src/controls/IntercomControl.js';
 import { IntercomV2Control } from '../src/controls/IntercomV2Control.js';
 import { IrrigationControl } from '../src/controls/IrrigationControl.js';
+import { NfcCodeTouchControl, isNfcAccessDenied, isNfcAccessGranted } from '../src/controls/NfcCodeTouchControl.js';
 import { WindowMonitorControl } from '../src/controls/WindowMonitorControl.js';
 import { LoxoneCommandError, LoxoneTimeoutError, LoxoneStateError } from '../src/errors.js';
 import { TextEvent } from '../src/protocol/events/TextEvent.js';
@@ -24,6 +25,7 @@ const ids = {
   intercom2: 'cccc0000-0000-0000-0000000000000106',
   irrigation: 'cccc0000-0000-0000-0000000000000107',
   monitor: 'cccc0000-0000-0000-0000000000000108',
+  nfc: 'cccc0000-0000-0000-0000000000000109',
 };
 const st = {
   zones: 'dddd0000-0000-0000-0000000000000107',
@@ -51,6 +53,7 @@ const FIXTURE: LoxoneStructureFile = {
     [ids.eib]: { name: 'EIB', type: 'EIBDimmer', uuidAction: ids.eib, states: { position: st.eibPos } },
     [ids.intercom]: { name: 'Door', type: 'Intercom', uuidAction: ids.intercom, states: {} },
     [ids.intercom2]: { name: 'DoorV2', type: 'IntercomV2', uuidAction: ids.intercom2, states: {} },
+    [ids.nfc]: { name: 'Keypad', type: 'NfcCodeTouch', uuidAction: ids.nfc, states: {} },
     [ids.irrigation]: { name: 'Garden', type: 'Irrigation', uuidAction: ids.irrigation, states: { zones: st.zones } },
     [ids.monitor]: {
       name: 'Windows',
@@ -183,6 +186,38 @@ describe('#2 Intercom securedDetails', () => {
   it('parses a string-valued (JSON) response and works on V2', async () => {
     const v2 = new IntercomV2Control(ctrl(ids.intercom2), executorReturning(JSON.stringify(details)));
     await expect(v2.securedDetails()).resolves.toEqual(details);
+  });
+});
+
+describe('NfcCodeTouch history', () => {
+  const entries = [
+    { ts: 1700000000, output: 1, type: 3, user: 'Rudy', description: 'Tag' },
+    { ts: 1700000100, output: -1, type: 7 },
+    { ts: 1700000050, output: 0, type: 0 },
+  ];
+  it('parses the (string-encoded) history into typed entries', async () => {
+    const nfc = new NfcCodeTouchControl(ctrl(ids.nfc), executorReturning(JSON.stringify(entries)));
+    await expect(nfc.history()).resolves.toEqual(entries);
+    await expect(nfc.latestHistoryEntry()).resolves.toMatchObject({ ts: 1700000100, type: 7 });
+  });
+  it('tells granted access, denied attempts and 2FA first factors apart', () => {
+    expect(isNfcAccessGranted(entries[0]!)).toBe(true);
+    expect(isNfcAccessGranted(entries[1]!)).toBe(false); // denied code
+    expect(isNfcAccessGranted(entries[2]!)).toBe(false); // first factor only
+    expect(isNfcAccessDenied(entries[0]!)).toBe(false);
+    expect(isNfcAccessDenied(entries[1]!)).toBe(true);
+    expect(isNfcAccessDenied(entries[2]!)).toBe(false); // first factor is neither
+    expect(isNfcAccessDenied({ ts: 1, output: 1, type: 13 })).toBe(true); // nfc disabled
+  });
+  it('drops malformed rows and tolerates a non-array response', async () => {
+    const nfc = new NfcCodeTouchControl(ctrl(ids.nfc), executorReturning([entries[0], null, { foo: 1 }]));
+    await expect(nfc.history()).resolves.toEqual([entries[0]]);
+    const empty = new NfcCodeTouchControl(ctrl(ids.nfc), executorReturning('garbage'));
+    await expect(empty.history()).resolves.toEqual([]);
+    await expect(empty.latestHistoryEntry()).resolves.toBeUndefined();
+  });
+  it('is the wrapper the registry uses for NfcCodeTouch', () => {
+    expect(CONTROL_WRAPPERS.NfcCodeTouch).toBe(NfcCodeTouchControl);
   });
 });
 

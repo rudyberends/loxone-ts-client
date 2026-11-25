@@ -37,7 +37,7 @@ import { LoadManagerControl } from './LoadManagerControl.js';
 import { MailBoxControl } from './MailBoxControl.js';
 import { MeterControl } from './MeterControl.js';
 import { MsShortcutControl } from './MsShortcutControl.js';
-import { NfcCodeTouchControl } from './NfcCodeTouchControl.js';
+import { NfcCodeTouchControl } from '../NfcCodeTouchControl.js';
 import { PoolControllerControl } from './PoolControllerControl.js';
 import { PowerUnitControl } from './PowerUnitControl.js';
 import { PresenceDetectorControl } from './PresenceDetectorControl.js';

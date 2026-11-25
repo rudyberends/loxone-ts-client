@@ -22,6 +22,8 @@ export type { IconAndColor } from './TextStateControl.js';
 export type { IntercomSecuredDetails } from './IntercomControl.js';
 export type { IrrigationZone } from './IrrigationControl.js';
 export type { MonitoredWindow } from './WindowMonitorControl.js';
+export { NfcHistoryType, isNfcAccessDenied, isNfcAccessGranted, parseNfcHistory } from './NfcCodeTouchControl.js';
+export type { NfcHistoryEntry } from './NfcCodeTouchControl.js';
 export { CONTROL_WRAPPERS } from './registry.js';
 export type { ControlWrapperConstructor } from './registry.js';
 // Generated wrappers for the remaining control types.
